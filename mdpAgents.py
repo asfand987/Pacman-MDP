@@ -35,7 +35,7 @@ import random
 import game
 import util
 
-#count = 0
+
 init = True
 
 class Grid:
@@ -135,10 +135,10 @@ class MDPAgent(Agent):
         width  = self.getLayoutWidth(corners)
 
         # map is the original/previous state.
-        self.map = Grid(width, height)
+        self.prevMap = Grid(width, height)
 
         # map1 is the updated/next state.
-        self.map1 = Grid(width, height)
+        self.newMap = Grid(width, height)
 
 
     # Functions to get the height and the width of the grid.
@@ -171,24 +171,24 @@ class MDPAgent(Agent):
         # Add walls to map
         walls = api.walls(state)
         for i in range(len(walls)):
-            self.map1.setValue(walls[i][0], walls[i][1], '%')
+            self.newMap.setValue(walls[i][0], walls[i][1], '%')
         
         # Add food to map
         food = api.food(state)
         for i in range(len(food)):
-            self.map1.setValue(food[i][0], food[i][1], 1) 
+            self.newMap.setValue(food[i][0], food[i][1], 1) 
         
         # Add ghosts to map
         ghosts = api.ghosts(state)
         for i in range(len(ghosts)):
             x = int(ghosts[i][0])
             y = int(ghosts[i][1])
-            self.map1.setValue(x, y, -100)
+            self.newMap.setValue(x, y, -100)
 
         # Add capsules to map
         capsules = api.capsules(state)
         for i in range(len(capsules)):
-            self.map1.setValue(capsules[i][0], capsules[i][1], 1)
+            self.newMap.setValue(capsules[i][0], capsules[i][1], 2)
         
        
     # Create a map with a current picture of the food that exists.
@@ -197,49 +197,49 @@ class MDPAgent(Agent):
         # After the initial state has run, @ini will be set to False so it can not run again after all ready running.
         global init
         if init == True:
-            for i in range(self.map.getWidth()):
-                for j in range(self.map.getHeight()):
-                    if self.map.getValue(i, j) != '%':
-                        self.map.setValue(i, j, 0)
-                        self.map1.setValue(i, j, 0)
+            for i in range(self.prevMap.getWidth()):
+                for j in range(self.prevMap.getHeight()):
+                    if self.prevMap.getValue(i, j) != '%':
+                        self.prevMap.setValue(i, j, 0)
+                        self.newMap.setValue(i, j, 0)
             init = False
         
     # update the map after each iteration and calculate the utility of each iteration using the bellman equation.
     def updateMap(self, state):
 
         # First, make all grid elements that aren't walls blank.
-        # Each iteration will run 50 times so we can find the optimal values for each state.
-        counter = 0
-        while counter < 50:
+        # Each iteration will run 30 times so we can find the optimal values for each state.
+        iterations = 0
+        while iterations < 30:
 
-            for i in range(self.map.getWidth()):
-                for j in range(self.map.getHeight()):  
+            for i in range(self.prevMap.getWidth()):
+                for j in range(self.prevMap.getHeight()):  
 
                     # Values for Walls, Food and Ghosts will remain unchanged respectively.
-                    if self.map.getValue(i, j) != '%' and self.map.getValue(i, j) != 1 and self.map.getValue(i, j) != -100:
+                    if self.prevMap.getValue(i, j) != '%' and self.prevMap.getValue(i, j) != 1 and self.prevMap.getValue(i, j) != -100:
                         
                         #store prev utility values of last state for all legal moves.
-                        if self.map.getValue(i, j + 1) != '%':
-                            prevNorthState = self.map.getValue(i, j + 1)
+                        if self.prevMap.getValue(i + 1, j) != '%':
+                            prevEastState = self.prevMap.getValue(i + 1, j)
                         else: 
-                            prevNorthState = self.map.getValue(i, j)
+                            prevEastState = self.prevMap.getValue(i, j)
 
-                        if self.map.getValue(i + 1, j) != '%':
-                            prevEastState = self.map.getValue(i + 1, j)
+                        if self.prevMap.getValue(i - 1, j) != '%':
+                            prevWestState = self.prevMap.getValue(i - 1, j)
                         else: 
-                            prevEastState = self.map.getValue(i, j)
+                            prevWestState = self.prevMap.getValue(i, j)
 
-                        if self.map.getValue(i - 1, j) != '%':
-                            prevWestState = self.map.getValue(i - 1, j)
+                        if self.prevMap.getValue(i, j + 1) != '%':
+                            prevNorthState = self.prevMap.getValue(i, j + 1)
                         else: 
-                            prevWestState = self.map.getValue(i, j)
+                            prevNorthState = self.prevMap.getValue(i, j)
                         
-                        if self.map.getValue(i, j - 1) != '%':
-                            prevSouthState = self.map.getValue(i, j - 1)
+                        if self.prevMap.getValue(i, j - 1) != '%':
+                            prevSouthState = self.prevMap.getValue(i, j - 1)
                         else: 
-                            prevSouthState = self.map.getValue(i, j)
+                            prevSouthState = self.prevMap.getValue(i, j)
 
-                        # Calculate the best payoff of each direction.
+                        # Take into account the non-deterministic nature of our environment.
                         north = (0.8*prevNorthState) + (0.1*prevEastState) + (0.1*prevWestState)
                         east = (0.8*prevEastState) + (0.1*prevNorthState) + (0.1*prevSouthState)
                         west = (0.8*prevWestState) + (0.1*prevNorthState) + (0.1*prevSouthState)
@@ -247,7 +247,7 @@ class MDPAgent(Agent):
                       
                         # if the current utility of the state is negative, this indicates a ghosts is nearby so we give a low reward value for this state. 
                         # Otherwise give a better reward value if there is not a ghosts nearby.
-                        if self.map.getValue(i, j) < 0:
+                        if self.prevMap.getValue(i, j) < 0:
                             reward = -100
                         else:
                             reward = 0.04
@@ -259,10 +259,10 @@ class MDPAgent(Agent):
                         bellman = reward + (0.8*maxNextUtility)
 
                         # Update the map.
-                        self.map1.setValue(i, j, round(bellman,5))  
+                        self.newMap.setValue(i, j, round(bellman,5))  
 
-            # Update the counter for each iteration.               
-            counter = counter + 1
+            # Update the iterations for each iteration.               
+            iterations = iterations + 1
 
         
     # This function calculates the best path to take as pacmans next step.
@@ -283,17 +283,17 @@ class MDPAgent(Agent):
         # Set all the next steps from the preious values of the map.
         # Remember map is the previous state of the map and map1 is the updated state of the map.
         # Check the next steps is legal, i.e., not a wall.
-        if self.map.getValue(x, y + 1) != '%':
-            northPath = self.map.getValue(x, y + 1) 
+        if self.prevMap.getValue(x, y + 1) != '%':
+            northPath = self.prevMap.getValue(x, y + 1) 
        
-        if self.map.getValue(x + 1, y) != '%':
-            eastPath = self.map.getValue(x + 1, y) 
+        if self.prevMap.getValue(x + 1, y) != '%':
+            eastPath = self.prevMap.getValue(x + 1, y) 
         
-        if self.map.getValue(x, y - 1) != '%':
-            southPath = self.map.getValue(x, y - 1)       
+        if self.prevMap.getValue(x, y - 1) != '%':
+            southPath = self.prevMap.getValue(x, y - 1)       
         
-        if self.map.getValue(x - 1, y) != '%':
-            westPath = self.map.getValue(x - 1, y) 
+        if self.prevMap.getValue(x - 1, y) != '%':
+            westPath = self.prevMap.getValue(x - 1, y) 
           
         # Find the next step with the max value and then return a string telling us to go to that step.
         maxValue = max(northPath, eastPath, southPath, westPath)
@@ -322,7 +322,7 @@ class MDPAgent(Agent):
         
         return "Random"
         
-    # Function to calculate the range of steps from the positon of ghosts that will make pacman run away.  
+    # Function to calculate the range of steps from the position of ghosts that will make pacman run away.  
     def runFromGhost(self, state):
         ghosts = api.ghostStates(state) 
 
@@ -331,8 +331,8 @@ class MDPAgent(Agent):
         
         # If the ghosts is not in a scared state.
         if ghostState == 0:
-            for i in range(self.map.getWidth()):
-                for j in range(self.map.getHeight()):
+            for i in range(self.prevMap.getWidth()):
+                for j in range(self.prevMap.getHeight()):
                     for k in range(len(ghosts)):
                            
                         # X and Y co-ordinates of ghosts.
@@ -352,25 +352,25 @@ class MDPAgent(Agent):
                         while steps < 4:
                             # For each if statement, check if we are in range and current step is not a wall. 
                             # If it is a wall, set appropritate boolean variable to true so the ghost does not have an effect past this wall.
-                            if x + steps < self.map.getWidth() - 1 and self.map.getValue(x + steps, y) == '%':
+                            if x + steps < self.prevMap.getWidth() - 1 and self.prevMap.getValue(x + steps, y) == '%':
                                 e = True
-                            elif x + steps < self.map.getWidth() - 1 and self.map.getValue(x + steps, y) != '%' and e == False:
-                                self.map.setValue(x + steps, y, -100 + steps)
+                            elif x + steps < self.prevMap.getWidth() - 1 and self.prevMap.getValue(x + steps, y) != '%' and e == False:
+                                self.prevMap.setValue(x + steps, y, -100 + steps)
 
-                            if x - steps > 1 and self.map.getValue(x - steps, y) == '%':
+                            if x - steps > 1 and self.prevMap.getValue(x - steps, y) == '%':
                                 w = True
-                            elif x - steps > 1 and self.map.getValue(x - steps, y) != '%' and w == False:
-                                self.map.setValue(x - steps, y, -100 + steps)
+                            elif x - steps > 1 and self.prevMap.getValue(x - steps, y) != '%' and w == False:
+                                self.prevMap.setValue(x - steps, y, -100 + steps)
 
-                            if y + steps < self.map.getHeight() - 1 and self.map.getValue(x, y + steps) == '%':
+                            if y + steps < self.prevMap.getHeight() - 1 and self.prevMap.getValue(x, y + steps) == '%':
                                 n = True
-                            elif y + steps < self.map.getHeight() - 1 and self.map.getValue(x, y + steps) != '%' and n == False:
-                                self.map.setValue(x, y + steps, -100 + steps)
+                            elif y + steps < self.prevMap.getHeight() - 1 and self.prevMap.getValue(x, y + steps) != '%' and n == False:
+                                self.prevMap.setValue(x, y + steps, -100 + steps)
 
-                            if y - steps > 1 and self.map.getValue(x, y - steps) == '%':
+                            if y - steps > 1 and self.prevMap.getValue(x, y - steps) == '%':
                                 s = True
-                            elif y - steps > 1 and self.map.getValue(x, y - steps) != '%' and s == False:
-                                self.map.setValue(x, y - steps, -100 + steps)
+                            elif y - steps > 1 and self.prevMap.getValue(x, y - steps) != '%' and s == False:
+                                self.prevMap.setValue(x, y - steps, -100 + steps)
 
                             steps = steps + 1
 
@@ -385,7 +385,7 @@ class MDPAgent(Agent):
         self.addObjectsToMap(state)
 
         # Update the prev map so we can perform our next iteration to find the next states.
-        self.map = self.map1
+        self.prevMap = self.newMap
         self.updateMap(state)
 
         # Sets the impact of ghosts on the map.
